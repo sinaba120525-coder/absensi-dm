@@ -41,7 +41,7 @@ function vals(obj) { return obj ? Object.values(obj) : []; }
 /* ---------------- seed ---------------- */
 function buildSeed() {
   const seed = {
-    settings: { schoolName: 'DM Albayan', sessions: 6, sessionNames: { s1: 'Jam ke-1', s2: 'Jam ke-2', s3: 'Jam ke-3', s4: 'Jam ke-4', s5: 'Jam ke-5', s6: 'Jam ke-6' } },
+    settings: { schoolName: 'DM Albayan', sessions: 6, adminPin: '12345', sessionNames: { s1: 'Jam ke-1', s2: 'Jam ke-2', s3: 'Jam ke-3', s4: 'Jam ke-4', s5: 'Jam ke-5', s6: 'Jam ke-6' } },
     teachers: { t1: { id: 't1', name: 'Ust. Ahmad', pin: '1234' } },
     classes: { c1: { id: 'c1', name: 'Kelas Tahfidz A' } },
     students: {}, attendance: {}, setoran: {},
@@ -56,6 +56,7 @@ function normalize(v) {
     settings: {
       schoolName: (v.settings && v.settings.schoolName) || 'DM Albayan',
       sessions: (v.settings && v.settings.sessions) || 6,
+      adminPin: (v.settings && v.settings.adminPin) || '12345',
       sessionNames: sn.length ? sn : ['Jam ke-1', 'Jam ke-2', 'Jam ke-3', 'Jam ke-4', 'Jam ke-5', 'Jam ke-6'],
     },
     teachers: vals(v.teachers), classes: vals(v.classes), students: vals(v.students),
@@ -536,6 +537,14 @@ function renderPengaturan() {
       <button class="btn ghost" id="backup">⬇️ Backup (JSON)</button>
       <button class="btn danger" style="margin-top:9px" id="reset">♻️ Reset Semua Data</button>
     </div>
+
+    <div class="card">
+      <h3>🔐 Keamanan Admin</h3>
+      <div class="field"><label>Ganti PIN Admin</label><input id="newAdminPin" type="password" inputmode="numeric" placeholder="PIN baru (min. 4 angka)"></div>
+      <button class="btn" id="saveAdminPin">💾 Simpan PIN Admin</button>
+      <button class="btn ghost" style="margin-top:9px" id="adminLogout">🚪 Keluar Mode Admin</button>
+      <p class="note">PIN admin diminta saat membuka APK Admin. Beritahu hanya kepada pengelola.</p>
+    </div>
   </div>`;
 }
 function bindPengaturan() {
@@ -563,8 +572,8 @@ function bindPengaturan() {
     const id = uid();
     w('classes/' + id, { id, name });
   };
-  document.querySelectorAll('[data-delclass]').forEach(b => b.onclick = () => {
-    if (!confirm('Hapus kelas ini beserta semua murid & data absensinya?')) return;
+  document.querySelectorAll('[data-delclass]').forEach(b => b.onclick = async () => {
+    if (!await askConfirm('Hapus kelas ini beserta semua murid & data absensinya?')) return;
     const cid = b.dataset.delclass;
     const up = { ['classes/' + cid]: null };
     S.data.students.filter(s => s.classId === cid).forEach(s => { up['students/' + s.id] = null; });
@@ -579,8 +588,8 @@ function bindPengaturan() {
     const id = uid();
     w('students/' + id, { id, classId: b.dataset.addstubtn, name });
   });
-  document.querySelectorAll('[data-delstu]').forEach(b => b.onclick = () => {
-    if (!confirm('Hapus murid ini beserta datanya?')) return;
+  document.querySelectorAll('[data-delstu]').forEach(b => b.onclick = async () => {
+    if (!await askConfirm('Hapus murid ini beserta datanya?')) return;
     const sid = b.dataset.delstu;
     const up = { ['students/' + sid]: null };
     S.data.attendance.filter(a => a.studentId === sid).forEach(a => { up['attendance/' + a.id] = null; });
@@ -595,17 +604,27 @@ function bindPengaturan() {
     w('teachers/' + id, { id, name, pin });
     toast('✅ Guru ditambahkan');
   };
-  document.querySelectorAll('[data-delteacher]').forEach(b => b.onclick = () => {
-    if (!confirm('Hapus guru ini?')) return;
+  document.querySelectorAll('[data-delteacher]').forEach(b => b.onclick = async () => {
+    if (!await askConfirm('Hapus guru ini?')) return;
     wdel('teachers/' + b.dataset.delteacher);
   });
   document.getElementById('backup').onclick = () => {
     downloadFile('backup-absensi-dm-albayan-' + todayStr() + '.json', 'application/json', JSON.stringify(S.data, null, 2));
   };
-  document.getElementById('reset').onclick = () => {
-    if (!confirm('Yakin? SEMUA data absensi, setoran, kelas, murid & guru akan dikembalikan ke awal.')) return;
+  document.getElementById('reset').onclick = async () => {
+    if (!await askConfirm('Yakin? SEMUA data absensi, setoran, kelas, murid & guru akan dikembalikan ke awal.')) return;
     R.set(buildSeed());
     toast('♻️ Data direset');
+  };
+  document.getElementById('saveAdminPin').onclick = () => {
+    const p = document.getElementById('newAdminPin').value.trim();
+    if (p.length < 4) return toast('❌ PIN minimal 4 angka');
+    w('settings', { schoolName: S.data.settings.schoolName, sessions: S.data.settings.sessions, adminPin: p, sessionNames: S.data.settings.sessionNames });
+    toast('✅ PIN admin disimpan');
+  };
+  document.getElementById('adminLogout').onclick = () => {
+    localStorage.removeItem('dm_admin_ok');
+    render();
   };
 }
 
@@ -616,8 +635,27 @@ const NAV = [
   { id: 'rekap', label: 'Rekap', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/></svg>' },
   { id: 'pengaturan', label: 'Atur', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 7.07-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.01a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/></svg>' },
 ];
+function renderAdminGate() {
+  document.getElementById('app').innerHTML = `
+  <div class="login-wrap"><div class="login-card">
+    <div class="logo" style="font-size:44px;text-align:center">🔐</div>
+    <div class="login-title">Mode Admin</div>
+    <div class="login-sub">Khusus pengelola — masukkan PIN admin</div>
+    <div class="field"><label>PIN Admin</label><input id="gPin" type="password" inputmode="numeric" placeholder="•••••"></div>
+    <button class="btn" id="gGo">Masuk sebagai Admin</button>
+  </div></div>`;
+  const go = () => {
+    if (document.getElementById('gPin').value.trim() === S.data.settings.adminPin) {
+      localStorage.setItem('dm_admin_ok', '1'); render();
+    } else toast('❌ PIN admin salah');
+  };
+  document.getElementById('gGo').onclick = go;
+  document.getElementById('gPin').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+}
+
 function render() {
   if (!S) return;
+  if (ADMIN_MODE && !localStorage.getItem('dm_admin_ok')) return renderAdminGate();
   if (!me) return renderLogin();
   let page = '';
   if (ui.view === 'absensi') page = renderAbsensi();
@@ -637,7 +675,7 @@ function render() {
     ${page}
   </div>
   <nav class="nav">
-    ${NAV.map(n => `<button class="${ui.view === n.id ? 'on' : ''}" data-nav="${n.id}">${n.icon}<span>${n.label}</span></button>`).join('')}
+    ${(ADMIN_MODE ? NAV : NAV.filter(n => n.id !== 'pengaturan')).map(n => `<button class="${ui.view === n.id ? 'on' : ''}" data-nav="${n.id}">${n.icon}<span>${n.label}</span></button>`).join('')}
   </nav>`;
 
   document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { ui.view = b.dataset.nav; render(); window.scrollTo(0, 0); });
