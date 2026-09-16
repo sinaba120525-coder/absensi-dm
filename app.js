@@ -66,16 +66,23 @@ function normalize(v) {
 /* ---------------- firebase ---------------- */
 function initFirebase() {
   firebase.initializeApp(firebaseConfig);
-  firebase.auth().signInAnonymously().catch(e => toast('Gagal login anonim: ' + e.message));
-  R = firebase.database().ref('data');
-  R.on('value', snap => {
-    let v = snap.val();
-    if (!v) { R.set(buildSeed()); return; }
-    S = { version: (S ? S.version + 1 : 1), data: normalize(v) };
-    if (!ui.classId && S.data.classes.length) ui.classId = S.data.classes[0].id;
-    if (!S.data.classes.some(c => c.id === ui.classId)) ui.classId = (S.data.classes[0] || {}).id || null;
-    render();
-  }, err => toast('Koneksi database: ' + err.message));
+  const setMsg = t => { const el = document.getElementById('loadmsg'); if (el) el.textContent = t; };
+  firebase.auth().onAuthStateChanged(user => {
+    if (!user) {
+      firebase.auth().signInAnonymously().catch(e => setMsg('Gagal login: ' + e.message));
+      return;
+    }
+    if (R) return; // sudah terpasang
+    R = firebase.database().ref('data');
+    R.on('value', snap => {
+      let v = snap.val();
+      if (!v) { R.set(buildSeed()); return; }
+      S = { version: (S ? S.version + 1 : 1), data: normalize(v) };
+      if (!ui.classId && S.data.classes.length) ui.classId = S.data.classes[0].id;
+      if (!S.data.classes.some(c => c.id === ui.classId)) ui.classId = (S.data.classes[0] || {}).id || null;
+      render();
+    }, err => setMsg('Koneksi database: ' + err.message));
+  });
 }
 const w = (path, value) => R.child(path).set(value);
 const wdel = path => R.child(path).remove();
@@ -644,6 +651,6 @@ function render() {
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; });
 (function boot() {
   try { me = JSON.parse(localStorage.getItem('dm_me') || 'null'); } catch (e) { me = null; }
-  document.getElementById('app').innerHTML = '<div class="login-wrap"><div class="login-card"><div class="logo" style="font-size:40px;text-align:center">🕌</div><div class="login-sub" style="text-align:center">Menghubungkan ke server…</div></div></div>';
+  document.getElementById('app').innerHTML = '<div class="login-wrap"><div class="login-card"><div class="logo" style="font-size:40px;text-align:center">🕌</div><div class="login-sub" id="loadmsg" style="text-align:center">Menghubungkan ke server…</div></div></div>';
   initFirebase();
 })();
