@@ -74,15 +74,22 @@ function initFirebase() {
   window.onerror = m => setMsg('Error: ' + m);
   setTimeout(() => { const el = document.getElementById('loadmsg'); if (el && el.textContent.includes('Menghubungkan')) { setMsg('Koneksi lambat. Ketuk tombol di bawah untuk muat ulang.'); showReload(); } }, 12000);
   firebase.initializeApp(firebaseConfig);
-  R = firebase.database().ref('data');
-  R.on('value', snap => {
-    let v = snap.val();
-    if (!v) { R.set(buildSeed()); return; }
-    S = { version: (S ? S.version + 1 : 1), data: normalize(v) };
-    if (!ui.classId && S.data.classes.length) ui.classId = S.data.classes[0].id;
-    if (!S.data.classes.some(c => c.id === ui.classId)) ui.classId = (S.data.classes[0] || {}).id || null;
-    render();
-  }, err => { setMsg('Koneksi database: ' + err.message); showReload(); });
+  firebase.auth().onAuthStateChanged(user => {
+    if (!user) {
+      firebase.auth().signInAnonymously().catch(e => { setMsg('Gagal login: ' + e.message); showReload(); });
+      return;
+    }
+    if (R) return; // sudah terpasang
+    R = firebase.database().ref('data');
+    R.on('value', snap => {
+      let v = snap.val();
+      if (!v) { R.set(buildSeed()); return; }
+      S = { version: (S ? S.version + 1 : 1), data: normalize(v) };
+      if (!ui.classId && S.data.classes.length) ui.classId = S.data.classes[0].id;
+      if (!S.data.classes.some(c => c.id === ui.classId)) ui.classId = (S.data.classes[0] || {}).id || null;
+      render();
+    }, err => { setMsg('Koneksi database: ' + err.message); showReload(); });
+  });
 }
 function showReload() {
   if (document.getElementById('reloadBtn')) return;
