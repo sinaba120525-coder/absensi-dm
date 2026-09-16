@@ -66,11 +66,18 @@ function normalize(v) {
 
 /* ---------------- firebase ---------------- */
 function initFirebase() {
-  firebase.initializeApp(firebaseConfig);
   const setMsg = t => { const el = document.getElementById('loadmsg'); if (el) el.textContent = t; };
+  if (typeof firebase === 'undefined') {
+    setMsg('Gagal memuat pustaka. Periksa internet, lalu ketuk tombol di bawah.');
+    showReload(); return;
+  }
+  window.onerror = m => setMsg('Error: ' + m);
+  setTimeout(() => { const el = document.getElementById('loadmsg'); if (el && el.textContent.includes('Menghubungkan')) { setMsg('Koneksi lambat. Ketuk tombol di bawah untuk muat ulang.'); showReload(); } }, 12000);
+  firebase.initializeApp(firebaseConfig);
+  try { firebase.auth().setPersistence(firebase.auth.Auth.Persistence.IN_MEMORY); } catch (e) {}
   firebase.auth().onAuthStateChanged(user => {
     if (!user) {
-      firebase.auth().signInAnonymously().catch(e => setMsg('Gagal login: ' + e.message));
+      firebase.auth().signInAnonymously().catch(e => { setMsg('Gagal login: ' + e.message); showReload(); });
       return;
     }
     if (R) return; // sudah terpasang
@@ -82,8 +89,18 @@ function initFirebase() {
       if (!ui.classId && S.data.classes.length) ui.classId = S.data.classes[0].id;
       if (!S.data.classes.some(c => c.id === ui.classId)) ui.classId = (S.data.classes[0] || {}).id || null;
       render();
-    }, err => setMsg('Koneksi database: ' + err.message));
+    }, err => { setMsg('Koneksi database: ' + err.message); showReload(); });
   });
+}
+function showReload() {
+  if (document.getElementById('reloadBtn')) return;
+  const card = document.querySelector('.login-card');
+  if (!card) return;
+  const b = document.createElement('button');
+  b.id = 'reloadBtn'; b.className = 'btn'; b.style.marginTop = '12px';
+  b.textContent = '🔄 Muat Ulang';
+  b.onclick = () => location.reload();
+  card.appendChild(b);
 }
 const w = (path, value) => R.child(path).set(value);
 const wdel = path => R.child(path).remove();
